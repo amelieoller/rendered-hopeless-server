@@ -10,6 +10,7 @@ var http = require('http');
 const socketIo = require('socket.io');
 const Note = require('../models/noteSchema');
 const Game = require('../models/gameSchema');
+const User = require('../models/userSchema');
 const connect = require('../dbconnect');
 
 /**
@@ -82,7 +83,7 @@ connect.then((db) => {
     socket.on('createNote', (title, gameId) => {
       let newNote = new Note({
         checked: false,
-        category: 'heart',
+        category: 'message-square',
         title,
         gameId,
       });
@@ -109,6 +110,35 @@ connect.then((db) => {
 
     socket.on('disconnect', () => {
       console.log('User disconnected');
+    });
+
+    // --------------USERS---------------
+    // Get user right after connection is established
+    // HARDCODED USER!!
+    User.find({ _id: '5ec2ca3f62a9ff17f0d96038' }, (err, user) => {
+      io.emit('getUser', user);
+    });
+
+    // Create a new user
+    socket.on('createUser', (name) => {
+      let newUser = new User({
+        name: 'test',
+        settings: {
+          selectedGameId: '',
+        },
+      });
+
+      newUser.save();
+
+      io.emit('createUser', newUser);
+    });
+
+    // Update a user
+    socket.on('updateUser', async (updatedUser) => {
+      const { _id, ...user } = updatedUser;
+      await User.replaceOne({ _id }, user);
+
+      io.emit('updateUser', updatedUser);
     });
   });
 });
