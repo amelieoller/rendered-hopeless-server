@@ -62,8 +62,11 @@ connect.then((db) => {
     });
 
     // Delete a game
-    socket.on('deleteGame', (gameId) => {
-      Game.deleteOne({ _id: gameId });
+    socket.on('deleteGame', async (gameId) => {
+      console.log(gameId);
+      await Game.deleteOne({ _id: gameId });
+
+      io.emit('deleteGame', gameId);
     });
 
     // --------------NOTES---------------
@@ -79,7 +82,7 @@ connect.then((db) => {
     socket.on('createNote', (title, gameId) => {
       let newNote = new Note({
         checked: false,
-        category: 'test',
+        category: 'heart',
         title,
         gameId,
       });
