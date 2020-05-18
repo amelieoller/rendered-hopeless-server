@@ -1,0 +1,175 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('../app');
+var debug = require('debug')('rendered-hopeless-server:server');
+var http = require('http');
+const socketIo = require('socket.io');
+const Note = require('../models/noteSchema');
+const Game = require('../models/gameSchema');
+const connect = require('../dbconnect');
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '3001');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app);
+
+/**
+ * Create socket io connection.
+ */
+
+const io = socketIo(server);
+
+connect.then((db) => {
+  io.on('connect', (socket) => {
+    console.log('User connected');
+
+    // --------------GAMES---------------
+    // Get all games
+    Game.find({}, (err, games) => {
+      io.emit('getGames', games);
+    });
+
+    // Create a new game
+    socket.on('createGame', (title) => {
+      let newGame = new Game({
+        title,
+      });
+
+      newGame.save();
+
+      io.emit('createGame', newGame);
+    });
+
+    // Update a game
+    socket.on('updateGame', async (gameId, newTitle) => {
+      const game = await Game.findOne({ _id: gameId });
+      game.title = newTitle;
+      game.save();
+
+      io.emit('updateGame', game);
+    });
+
+    // Delete a game
+    socket.on('deleteGame', (gameId) => {
+      Game.deleteOne({ _id: gameId });
+    });
+
+    // --------------NOTES---------------
+
+    // Get all notes related to a game
+    socket.on('getNotes', (gameId) => {
+      Note.find({ gameId: gameId }, (err, notes) => {
+        io.emit('getNotes', notes);
+      });
+    });
+
+    // Create a new note
+    socket.on('createNote', (title, gameId) => {
+      let newNote = new Note({
+        checked: false,
+        category: 'test',
+        title,
+        gameId,
+      });
+
+      newNote.save();
+
+      io.emit('createNote', newNote);
+    });
+
+    // Update a note
+    socket.on('updateNote', async (updatedNote) => {
+      const { _id, ...note } = updatedNote;
+      await Note.replaceOne({ _id }, note);
+
+      io.emit('updateNote', updatedNote);
+    });
+
+    // Delete a note
+    socket.on('deleteNote', async (noteId) => {
+      await Note.deleteOne({ _id: noteId });
+
+      io.emit('deleteNote', noteId);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('User disconnected');
+    });
+  });
+});
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string' ? 'Pipe ' + port : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
